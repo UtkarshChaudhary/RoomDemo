@@ -1,0 +1,139 @@
+package com.example.lenovo.roomdemo;
+
+import android.content.Intent;
+import android.os.AsyncTask;
+import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
+import android.support.v7.app.AppCompatActivity;
+import android.os.Bundle;
+import android.support.v7.widget.DefaultItemAnimator;
+import android.support.v7.widget.DividerItemDecoration;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.Toolbar;
+import android.support.v7.widget.helper.ItemTouchHelper;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+public class MainActivity extends AppCompatActivity {
+
+    private static final int REQUEST_ADD = 100;
+    RecyclerView mRecyclerView;
+    List<Note> mNotes = new ArrayList<>();
+    RecyclerAdapter mAdapter;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
+        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent add = new Intent(MainActivity.this, AddNote.class);
+                startActivityForResult(add, REQUEST_ADD);
+            }
+        });
+
+        NoteDatabase db = NoteDatabase.getInstance(this);
+        final NoteDao noteDao = db.noteDao();
+        new AsyncTask<Void, Void, List<Note>>() {
+
+            @Override
+            protected List<Note> doInBackground(Void... params) {
+
+                return noteDao.getAllNotes();
+            }
+
+            @Override
+            protected void onPostExecute(List<Note> notes) {
+                mNotes.clear();
+                mNotes.addAll(notes);
+                mAdapter.notifyDataSetChanged();
+            }
+        }.execute();
+
+        mRecyclerView = (RecyclerView) findViewById(R.id.recycler_view);
+        mAdapter = new RecyclerAdapter(this, mNotes, new RecyclerAdapter.NotesClickListener() {
+            @Override
+            public void onItemClick(View view, int position) {
+                Note note = mNotes.get(position);
+                Snackbar.make(mRecyclerView, note.getTitle(), Snackbar.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onRemoveClicked(int position) {
+                mNotes.remove(position);
+                mAdapter.notifyItemRemoved(position);
+            }
+        });
+        mRecyclerView.setAdapter(mAdapter);
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        mRecyclerView.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
+        mRecyclerView.setItemAnimator(new DefaultItemAnimator());
+
+        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP | ItemTouchHelper.DOWN, ItemTouchHelper.RIGHT) {
+            @Override
+            public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder target) {
+                int from = viewHolder.getAdapterPosition();
+                int to = target.getAdapterPosition();
+                Collections.swap(mNotes, from, to);
+                mAdapter.notifyItemMoved(from, to);
+                return true;
+            }
+
+            @Override
+            public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
+                int position = viewHolder.getAdapterPosition();
+                mNotes.remove(position);
+                mAdapter.notifyItemRemoved(position);
+            }
+        });
+        itemTouchHelper.attachToRecyclerView(mRecyclerView);
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.menu_main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle vclicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+
+        //noinspection SimplifiableIfStatement
+        if (id == R.id.action_reset) {
+            mNotes.clear();
+            mAdapter.notifyDataSetChanged();
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_ADD && resultCode == RESULT_OK) {
+            String title = data.getStringExtra("title");
+            String desc = data.getStringExtra("desc");
+            Note note = new Note(title, desc);
+            int size = mNotes.size();
+            mNotes.add(note);
+            mAdapter.notifyItemInserted(size);
+        }
+    }
+
+}
